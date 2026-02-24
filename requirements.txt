@@ -1,0 +1,4 @@
+Flask
+razorpay
+opencv-python
+gunicorn

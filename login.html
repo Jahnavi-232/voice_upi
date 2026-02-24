@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Voice Payment</h2>
+
+<input type="email" id="email" placeholder="Email"><br>
+<button onclick="startVoice()">Speak Payment</button>
+<p id="result"></p>
+
+<button onclick="capture()">Verify Face & Pay</button>
+<button onclick="startVoice()">🎤 Speak</button>
+<input type="text" id="voiceText" placeholder="Voice output here">
+
+<script>
+function startVoice() {
+    var recognition = new webkitSpeechRecognition();
+    recognition.lang = "en-IN";
+
+    recognition.onresult = function(event) {
+        document.getElementById("voiceText").value =
+            event.results[0][0].transcript;
+    };
+
+    recognition.start();
+}
+</script>
+
+<input type="hidden" id="amount">
+<input type="hidden" id="receiver">
+
+<video id="video" width="320" height="240" autoplay></video>
+<canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+<script>
+navigator.mediaDevices.getUserMedia({ video: true })
+.then(stream => document.getElementById("video").srcObject = stream);
+
+function startVoice() {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'en-IN';
+    recognition.start();
+
+    recognition.onresult = function(event) {
+        const speech = event.results[0][0].transcript.toLowerCase();
+
+        const amountMatch = speech.match(/\d+/);
+        let nameMatch = speech.includes("to") ? speech.split("to")[1].trim() : null;
+
+        if (amountMatch && nameMatch) {
+            document.getElementById("amount").value = amountMatch[0];
+            document.getElementById("receiver").value = nameMatch;
+            document.getElementById("result").innerText =
+                "Pay ₹" + amountMatch[0] + " to " + nameMatch;
+        } else {
+            alert("Could not detect amount or name.");
+        }
+    };
+}
+
+function capture() {
+    const canvas = document.getElementById("canvas");
+    const video = document.getElementById("video");
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const image = canvas.toDataURL("image/png");
+
+    fetch("/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: `email=${email.value}&amount=${amount.value}&receiver=${receiver.value}&image=${encodeURIComponent(image)}`
+    })
+    .then(res => res.json())
+    .then(order => {
+        var options = {
+            "key": "rzp_test_xxxxxxxxx",
+            "amount": order.amount,
+            "currency": "INR",
+            "order_id": order.id,
+            "handler": function (response){
+                fetch("/verify_payment", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        payment_id: response.razorpay_payment_id,
+                        order_id: response.razorpay_order_id,
+                        signature: response.razorpay_signature
+                    })
+                }).then(res => res.text()).then(alert);
+            }
+        };
+        var rzp1 = new Razorpay(options);
+        rzp1.open();
+    });
+}
+</script>
+
+</body>
+</html>
